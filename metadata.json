@@ -1,0 +1,7 @@
+{
+  "name": "OkulYönetim",
+  "description": "Özel okullar için öğrenci kayıt, finans takibi ve veli iletişim portalı.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
