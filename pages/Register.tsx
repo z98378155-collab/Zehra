@@ -1,26 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, Save, AlertCircle, CheckCircle, Users } from 'lucide-react';
-
-// Mock Capacity Data
-// In a real app, this comes from the backend.
-const CLASS_CAPACITIES: Record<string, number> = {
-    '1-A': 35, // Full
-    '1-B': 30,
-    '1-C': 12,
-    '1-D': 0,
-    '1-E': 0,
-    '5-A': 32,
-    '5-B': 35, // Full
-    '5-C': 20,
-    '8-A': 34,
-};
+import { UserPlus, Save, AlertCircle, CheckCircle, Users, Lock, ShieldCheck, X } from 'lucide-react';
+import { supabase } from '../services/supabase';
 
 const MAX_CAPACITY = 35;
-const EXISTING_IDS = [1234, 5678, 1001]; // Mock existing school numbers
 
 const Register: React.FC = () => {
     const navigate = useNavigate();
+    
+    // Form Data State
     const [formData, setFormData] = useState({
         parentName: '',
         parentSurname: '',
@@ -32,50 +20,138 @@ const Register: React.FC = () => {
         grade: '1',
         branch: 'A'
     });
+
+    // Admin Auth State
+    const [showAdminModal, setShowAdminModal] = useState(false);
+    const [adminCredentials, setAdminCredentials] = useState({
+        tc: '',
+        password: ''
+    });
     
-    const [generatedSchoolNo, setGeneratedSchoolNo] = useState<number | null>(null);
+    // System State
+    const [generatedSchoolNo, setGeneratedSchoolNo] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [authError, setAuthError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [loading, setLoading] = useState(false);
 
     // Calculate current selection key (e.g., "5-A")
     const currentClassKey = `${formData.grade}-${formData.branch}`;
-    const currentCount = CLASS_CAPACITIES[currentClassKey] || 0;
-    const isFull = currentCount >= MAX_CAPACITY;
 
-    const generateUniqueSchoolNo = (): number => {
+    const generateUniqueSchoolNo = async (): Promise<string> => {
         let unique = false;
-        let newId = 0;
+        let newId = "";
         while (!unique) {
-            // Generate random 6 digit number (between 100000 and 999999) 
-            // Or simplified 4-6 digits as requested "max 6 digits"
-            newId = Math.floor(1000 + Math.random() * 9000); // Sample range 1000-9999
-            if (!EXISTING_IDS.includes(newId)) {
+            // Generate random 4 digit number for simplicity
+            const num = Math.floor(1000 + Math.random() * 9000); 
+            newId = num.toString();
+            
+            const { data } = await supabase
+                .from('students')
+                .select('id')
+                .eq('school_no', newId);
+            
+            if (!data || data.length === 0) {
                 unique = true;
             }
         }
         return newId;
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    // 1. Initial Form Validation
+    const handleInitialSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
-
-        if (isFull) {
-            setError(`Seçilen sınıf (${currentClassKey}) kontenjanı doludur. Lütfen başka bir şube seçiniz.`);
-            return;
-        }
+        setAuthError(null);
 
         if (formData.studentTc.length !== 11 || formData.parentPhone.length !== 11) {
              setError("TC Kimlik No veya Telefon numarası 11 hane olmalıdır.");
              return;
         }
 
-        // Simulate Registration Process
-        const newSchoolNo = generateUniqueSchoolNo();
-        setGeneratedSchoolNo(newSchoolNo);
-        setSuccess(true);
-        
-        // In a real app, we would POST this data to the backend here.
+        // Open Admin Verification Modal
+        setShowAdminModal(true);
+    };
+
+    // 2. Admin Verification and Registration Logic
+    const verifyAndRegister = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setAuthError(null);
+        setLoading(true);
+
+        // --- ADMIN SECURITY CHECK ---
+        // In a real app, this would be a server-side check or a specific auth API call.
+        // Replicating the logic from Login.tsx for consistency:
+        if (adminCredentials.tc !== '11111111111' || !adminCredentials.password) {
+            setAuthError("Yetkisiz işlem! Geçersiz yönetici bilgileri.");
+            setLoading(false);
+            return;
+        }
+        // -----------------------------
+
+        try {
+            // 1. Check Capacity
+            const { count, error: countError } = await supabase
+                .from('students')
+                .select('*', { count: 'exact', head: true })
+                .eq('full_class', currentClassKey);
+
+            if (countError) throw countError;
+
+            if (count !== null && count >= MAX_CAPACITY) {
+                setError(`Seçilen sınıf (${currentClassKey}) kontenjanı doludur (${count}/${MAX_CAPACITY}). Lütfen başka bir şube seçiniz.`);
+                setShowAdminModal(false); // Close modal to let user change branch
+                setLoading(false);
+                return;
+            }
+
+            // 2. Generate School No
+            const newSchoolNo = await generateUniqueSchoolNo();
+
+            // 3. Insert Student
+            const { data: studentData, error: insertError } = await supabase
+                .from('students')
+                .insert([
+                    {
+                        name: formData.studentName,
+                        surname: formData.studentSurname,
+                        parent_name: `${formData.parentName} ${formData.parentSurname}`,
+                        phone: formData.parentPhone,
+                        tc_no: formData.studentTc,
+                        school_no: newSchoolNo,
+                        gender: formData.gender,
+                        grade_level: formData.grade,
+                        branch: formData.branch,
+                        full_class: currentClassKey
+                    }
+                ])
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            // 4. Create Initial Financial Record (Default Fees)
+            if (studentData) {
+                await supabase.from('financial_records').insert([
+                    {
+                        student_id: studentData.id,
+                        tuition_fee: 150000,
+                        material_fee: 35000,
+                        paid_amount: 0
+                    }
+                ]);
+            }
+
+            setGeneratedSchoolNo(newSchoolNo);
+            setSuccess(true);
+            setShowAdminModal(false);
+
+        } catch (err: any) {
+            console.error(err);
+            setAuthError(err.message || "Kayıt sırasında bir hata oluştu.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (success && generatedSchoolNo) {
@@ -109,7 +185,7 @@ const Register: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
              <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
                 <div className="bg-indigo-900 px-8 py-6">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -121,7 +197,7 @@ const Register: React.FC = () => {
                     </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-8 space-y-8">
+                <form onSubmit={handleInitialSubmit} className="p-8 space-y-8">
                     
                     {error && (
                         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
@@ -215,15 +291,10 @@ const Register: React.FC = () => {
                                 <span className="text-lg font-bold text-indigo-900 ml-1">{currentClassKey}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-500">Kontenjan:</span>
-                                <span className={`font-bold ${isFull ? 'text-red-600' : 'text-green-600'}`}>
-                                    {currentCount} / {MAX_CAPACITY}
+                                <span className="text-sm text-gray-500">Kapasite:</span>
+                                <span className="font-bold text-gray-700">
+                                     Max {MAX_CAPACITY}
                                 </span>
-                                {isFull && (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                        DOLU
-                                    </span>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -234,10 +305,7 @@ const Register: React.FC = () => {
                         </button>
                         <button 
                             type="submit" 
-                            disabled={isFull}
-                            className={`flex items-center gap-2 px-6 py-3 border border-transparent text-base font-medium rounded-md text-white shadow-sm transition-colors ${
-                                isFull ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-                            }`}
+                            className="flex items-center gap-2 px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         >
                             <Save className="w-5 h-5" />
                             Kaydı Tamamla
@@ -245,6 +313,87 @@ const Register: React.FC = () => {
                     </div>
                 </form>
              </div>
+
+             {/* ADMIN VERIFICATION MODAL */}
+             {showAdminModal && (
+                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+                         <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
+                             <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                 <ShieldCheck className="w-5 h-5" />
+                                 Yönetici Onayı Gerekiyor
+                             </h3>
+                             <button onClick={() => setShowAdminModal(false)} className="text-white/80 hover:text-white">
+                                 <X className="w-5 h-5" />
+                             </button>
+                         </div>
+                         
+                         <form onSubmit={verifyAndRegister} className="p-6 space-y-4">
+                             <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm text-red-800 mb-4">
+                                 Güvenlik gereği yeni öğrenci kaydı oluşturmak için yönetici kimliğinizi doğrulamanız gerekmektedir.
+                             </div>
+
+                             {authError && (
+                                <div className="text-sm text-red-600 font-medium flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4" /> {authError}
+                                </div>
+                             )}
+
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Yönetici T.C. Kimlik No</label>
+                                 <div className="relative">
+                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                         <Users className="h-4 w-4 text-gray-400" />
+                                     </div>
+                                     <input 
+                                         type="text" 
+                                         required 
+                                         maxLength={11}
+                                         className="w-full pl-10 border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500 border p-2"
+                                         value={adminCredentials.tc}
+                                         onChange={e => setAdminCredentials({...adminCredentials, tc: e.target.value})}
+                                         placeholder="11111111111"
+                                     />
+                                 </div>
+                             </div>
+
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Yönetici Şifresi</label>
+                                 <div className="relative">
+                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                         <Lock className="h-4 w-4 text-gray-400" />
+                                     </div>
+                                     <input 
+                                         type="password" 
+                                         required 
+                                         className="w-full pl-10 border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500 border p-2"
+                                         value={adminCredentials.password}
+                                         onChange={e => setAdminCredentials({...adminCredentials, password: e.target.value})}
+                                         placeholder="••••••"
+                                     />
+                                 </div>
+                             </div>
+
+                             <div className="pt-2 flex justify-end gap-3">
+                                 <button 
+                                     type="button" 
+                                     onClick={() => setShowAdminModal(false)}
+                                     className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                                 >
+                                     İptal
+                                 </button>
+                                 <button 
+                                     type="submit" 
+                                     disabled={loading}
+                                     className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm transition-colors disabled:bg-gray-400"
+                                 >
+                                     {loading ? 'Doğrulanıyor...' : 'Doğrula ve Kaydet'}
+                                 </button>
+                             </div>
+                         </form>
+                     </div>
+                 </div>
+             )}
         </div>
     );
 };

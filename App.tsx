@@ -6,33 +6,33 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Admin from './pages/Admin';
 import VoiceSupport from './components/VoiceSupport';
-import { UserRole } from './types';
+import { UserRole, SessionUser } from './types';
 
 const App: React.FC = () => {
-  const [userRole, setUserRole] = useState<UserRole>(UserRole.GUEST);
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
 
-  const handleLogin = (role: UserRole) => {
-    setUserRole(role);
+  const handleLogin = (user: SessionUser) => {
+    setCurrentUser(user);
   };
 
   const handleLogout = () => {
-    setUserRole(UserRole.GUEST);
+    setCurrentUser(null);
   };
 
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        <Navbar userRole={userRole} onLogout={handleLogout} />
+        <Navbar currentUser={currentUser} onLogout={handleLogout} />
         
         <main>
           <Routes>
             <Route 
               path="/" 
-              element={userRole !== UserRole.GUEST ? <Home /> : <Navigate to="/login" />} 
+              element={currentUser && currentUser.role === UserRole.CUSTOMER ? <Home currentUser={currentUser} /> : <Navigate to="/login" />} 
             />
             <Route 
               path="/login" 
-              element={userRole === UserRole.GUEST ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} 
+              element={!currentUser ? <Login onLogin={handleLogin} /> : (currentUser.role === UserRole.ADMIN ? <Navigate to="/admin" /> : <Navigate to="/" />)} 
             />
             <Route 
               path="/register" 
@@ -40,7 +40,7 @@ const App: React.FC = () => {
             />
             <Route 
               path="/admin" 
-              element={userRole === UserRole.ADMIN ? <Admin /> : <Navigate to="/login" />} 
+              element={currentUser && currentUser.role === UserRole.ADMIN ? <Admin /> : <Navigate to="/login" />} 
             />
           </Routes>
         </main>

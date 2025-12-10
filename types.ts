@@ -55,3 +55,11 @@ export enum UserRole {
   CUSTOMER = 'CUSTOMER', // Veli
   GUEST = 'GUEST'
 }
+
+export interface SessionUser {
+  role: UserRole;
+  name: string; // Display name (e.g., "Ahmet Yılmaz" or "Okul Müdürü")
+  studentId?: number; // Only for CUSTOMER role
+  studentName?: string; // Only for CUSTOMER role
+  grade?: string; // Only for CUSTOMER role
+}

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.32.0",
+    "@supabase/supabase-js": "2",
     "lucide-react": "^0.559.0",
     "react-router-dom": "^7.10.1",
     "react-dom": "^19.2.1",

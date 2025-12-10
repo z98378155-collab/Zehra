@@ -1,28 +1,18 @@
-import React, { useState } from 'react';
-import { FinancialRecord, PaymentReceipt, WeeklySchedule, SchoolActivity } from '../types';
+import React, { useState, useEffect } from 'react';
+import { FinancialRecord, PaymentReceipt, WeeklySchedule, SchoolActivity, SessionUser } from '../types';
 import { Upload, FileText, CheckCircle, Clock, AlertCircle, TrendingUp, Calendar, BookOpen, Wallet, Activity } from 'lucide-react';
+import { supabase } from '../services/supabase';
 
-// Mock Data
-const MOCK_FINANCIALS: FinancialRecord = {
-  tuitionFee: 150000,
-  materialFee: 35000,
-  totalDebt: 185000,
-  paidAmount: 90000,
-  remainingDebt: 95000
-};
-
-const MOCK_RECEIPTS: PaymentReceipt[] = [
-  { id: 1, date: "2023-09-15", amount: 45000, description: "Eylül Taksiti", status: "approved", fileUrl: "#" },
-  { id: 2, date: "2023-10-15", amount: 45000, description: "Ekim Taksiti", status: "approved", fileUrl: "#" },
-  { id: 3, date: "2023-11-15", amount: 0, description: "Dekont İnceleniyor...", status: "pending", fileUrl: "#" }
-];
+interface HomeProps {
+    currentUser: SessionUser;
+}
 
 const MOCK_SCHEDULE: WeeklySchedule[] = [
-  { day: "Pazartesi", lessons: ["Matematik", "Matematik", "Türkçe", "Fen Bilimleri", "İngilizce", "Beden Eğitimi"] },
-  { day: "Salı", lessons: ["Sosyal Bilgiler", "Türkçe", "Türkçe", "Matematik", "Görsel Sanatlar", "Müzik"] },
-  { day: "Çarşamba", lessons: ["Fen Bilimleri", "Fen Bilimleri", "İngilizce", "İngilizce", "Matematik", "Rehberlik"] },
-  { day: "Perşembe", lessons: ["Türkçe", "Türkçe", "Sosyal Bilgiler", "Din Kültürü", "Bilişim Tek.", "Bilişim Tek."] },
-  { day: "Cuma", lessons: ["Matematik", "Fen Bilimleri", "İngilizce", "Beden Eğitimi", "Beden Eğitimi", "Kulüp Saati"] },
+    { day: "Pazartesi", lessons: ["Matematik", "Matematik", "Türkçe", "Fen Bilimleri", "İngilizce", "Beden Eğitimi"] },
+    { day: "Salı", lessons: ["Sosyal Bilgiler", "Türkçe", "Türkçe", "Matematik", "Görsel Sanatlar", "Müzik"] },
+    { day: "Çarşamba", lessons: ["Fen Bilimleri", "Fen Bilimleri", "İngilizce", "İngilizce", "Matematik", "Rehberlik"] },
+    { day: "Perşembe", lessons: ["Türkçe", "Türkçe", "Sosyal Bilgiler", "Din Kültürü", "Bilişim Tek.", "Bilişim Tek."] },
+    { day: "Cuma", lessons: ["Matematik", "Fen Bilimleri", "İngilizce", "Beden Eğitimi", "Beden Eğitimi", "Kulüp Saati"] },
 ];
 
 const MOCK_ACTIVITIES: SchoolActivity[] = [
@@ -31,10 +21,14 @@ const MOCK_ACTIVITIES: SchoolActivity[] = [
   { id: 3, title: "Kodlama Atölyesi Materyalleri", date: "2023-10-05", cost: 750, description: "Arduino seti ve elektronik bileşenler." }
 ];
 
-const Home: React.FC = () => {
+const Home: React.FC<HomeProps> = ({ currentUser }) => {
   const [activeTab, setActiveTab] = useState<'finance' | 'schedule' | 'activities'>('finance');
-  const [financials] = useState<FinancialRecord>(MOCK_FINANCIALS);
-  const [receipts, setReceipts] = useState<PaymentReceipt[]>(MOCK_RECEIPTS);
+  
+  const [financials, setFinancials] = useState<FinancialRecord>({
+      tuitionFee: 0, materialFee: 0, totalDebt: 0, paidAmount: 0, remainingDebt: 0
+  });
+  const [receipts, setReceipts] = useState<PaymentReceipt[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Upload Form State
   const [uploadAmount, setUploadAmount] = useState('');
@@ -43,42 +37,107 @@ const Home: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
+  useEffect(() => {
+      const fetchData = async () => {
+          if (!currentUser.studentId) return;
+
+          try {
+              // Fetch Financials
+              const { data: finData, error: finError } = await supabase
+                  .from('financial_records')
+                  .select('*')
+                  .eq('student_id', currentUser.studentId)
+                  .single();
+              
+              if (finData) {
+                  const total = (finData.tuition_fee || 0) + (finData.material_fee || 0);
+                  const paid = finData.paid_amount || 0;
+                  setFinancials({
+                      tuitionFee: finData.tuition_fee || 0,
+                      materialFee: finData.material_fee || 0,
+                      totalDebt: total,
+                      paidAmount: paid,
+                      remainingDebt: total - paid
+                  });
+              }
+
+              // Fetch Receipts
+              const { data: recData, error: recError } = await supabase
+                  .from('receipts')
+                  .select('*')
+                  .eq('student_id', currentUser.studentId)
+                  .order('created_at', { ascending: false });
+
+              if (recData) {
+                  setReceipts(recData);
+              }
+
+          } catch (e) {
+              console.error(e);
+          } finally {
+              setLoading(false);
+          }
+      };
+
+      fetchData();
+  }, [currentUser.studentId]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setUploadFile(e.target.files[0]);
     }
   };
 
-  const handleUpload = (e: React.FormEvent) => {
+  const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadFile || !uploadAmount) return;
+    if (!uploadFile || !uploadAmount || !currentUser.studentId) return;
 
     setIsUploading(true);
     
-    // Simulate API upload
-    setTimeout(() => {
-      const newReceipt: PaymentReceipt = {
-        id: Date.now(),
-        date: new Date().toISOString().split('T')[0],
-        amount: parseFloat(uploadAmount),
-        description: uploadDesc || "Yeni Ödeme",
-        status: "pending",
-        fileUrl: "#"
-      };
+    try {
+        // In a real app, upload file to Storage bucket first, get URL.
+        // For now, we mock the URL.
+        const mockFileUrl = "https://example.com/file.pdf"; 
 
-      setReceipts([newReceipt, ...receipts]);
-      setIsUploading(false);
-      setUploadSuccess(true);
-      
-      // Reset
-      setUploadAmount('');
-      setUploadDesc('');
-      setUploadFile(null);
-      setTimeout(() => setUploadSuccess(false), 3000);
-    }, 1500);
+        const { data, error } = await supabase
+            .from('receipts')
+            .insert([
+                {
+                    student_id: currentUser.studentId,
+                    amount: parseFloat(uploadAmount),
+                    description: uploadDesc || "Yeni Ödeme",
+                    status: "pending",
+                    date: new Date().toISOString().split('T')[0],
+                    file_url: mockFileUrl
+                }
+            ])
+            .select()
+            .single();
+
+        if (error) throw error;
+        
+        if (data) {
+             setReceipts([data as PaymentReceipt, ...receipts]);
+             setUploadSuccess(true);
+             setUploadAmount('');
+             setUploadDesc('');
+             setUploadFile(null);
+             setTimeout(() => setUploadSuccess(false), 3000);
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert("Yükleme başarısız oldu.");
+    } finally {
+        setIsUploading(false);
+    }
   };
 
-  const paymentPercentage = Math.round((financials.paidAmount / financials.totalDebt) * 100);
+  const paymentPercentage = financials.totalDebt > 0 ? Math.round((financials.paidAmount / financials.totalDebt) * 100) : 100;
+
+  if (loading) {
+      return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -86,9 +145,9 @@ const Home: React.FC = () => {
       {/* Welcome Header */}
       <div className="bg-gradient-to-r from-indigo-900 to-blue-800 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Merhaba, Sayın Veli</h1>
+          <h1 className="text-3xl font-bold mb-2">Merhaba, {currentUser.name}</h1>
           <p className="text-blue-100 opacity-90">
-            Öğrenciniz <strong>Ali Yılmaz (5-B)</strong> için yönetim paneli.
+            Öğrenciniz <strong>{currentUser.studentName} ({currentUser.grade})</strong> için yönetim paneli.
           </p>
         </div>
         <div className="flex bg-indigo-950/30 p-1 rounded-lg">
@@ -139,7 +198,9 @@ const Home: React.FC = () => {
                   <AlertCircle className="w-5 h-5 text-orange-500" />
                 </div>
                 <p className="text-2xl font-bold text-orange-600">₺{financials.remainingDebt.toLocaleString()}</p>
-                <p className="text-xs text-gray-400 mt-2">Son ödeme tarihi: 15.11.2023</p>
+                <p className="text-xs text-gray-400 mt-2">
+                    {financials.remainingDebt > 0 ? "Ödemelerinizi düzenli yapınız." : "Borcunuz bulunmamaktadır."}
+                </p>
               </div>
             </div>
 
@@ -158,7 +219,7 @@ const Home: React.FC = () => {
                      </tr>
                    </thead>
                    <tbody className="bg-white divide-y divide-gray-200">
-                     {receipts.map((receipt) => (
+                     {receipts.length > 0 ? receipts.map((receipt) => (
                        <tr key={receipt.id}>
                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{receipt.date}</td>
                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{receipt.description}</td>
@@ -183,7 +244,11 @@ const Home: React.FC = () => {
                            )}
                          </td>
                        </tr>
-                     ))}
+                     )) : (
+                         <tr>
+                             <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">Henüz bir ödeme kaydı bulunmamaktadır.</td>
+                         </tr>
+                     )}
                    </tbody>
                  </table>
                </div>
@@ -231,7 +296,7 @@ const Home: React.FC = () => {
                     value={uploadDesc}
                     onChange={(e) => setUploadDesc(e.target.value)}
                     className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
-                    placeholder="Örn: Kasım Taksiti - Öğrenci TC"
+                    placeholder="Örn: Kasım Taksiti"
                   />
                 </div>
 
@@ -275,7 +340,7 @@ const Home: React.FC = () => {
              <div>
                 <h3 className="text-lg font-semibold text-indigo-900 flex items-center gap-2">
                   <BookOpen className="w-5 h-5" />
-                  Haftalık Ders Programı (5-B)
+                  Haftalık Ders Programı ({currentUser.grade})
                 </h3>
                 <p className="text-sm text-indigo-700">2023-2024 Eğitim Öğretim Yılı 1. Dönem</p>
              </div>

@@ -1,35 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateMarketingMessage, searchMarketTrends } from '../services/geminiService';
 import { Student, SearchResult, PaymentReceipt } from '../types';
 import { Users, Send, Sparkles, Search, CheckCircle, Clock, Calendar, History, Megaphone, FileText, Download, XCircle, Eye, BookOpen, PlusCircle, Bell, UserX } from 'lucide-react';
-
-// Mock Data
-const MOCK_STUDENTS: Student[] = [
-  { 
-    id: 1, name: "Ali Yılmaz", grade: "5-B", parentName: "Mehmet Yılmaz", phone: "05551234567",
-    financials: { tuitionFee: 150000, materialFee: 35000, totalDebt: 185000, paidAmount: 90000, remainingDebt: 95000 },
-    receipts: []
-  },
-  { 
-    id: 2, name: "Ayşe Kaya", grade: "8-A", parentName: "Zeynep Kaya", phone: "05559876543",
-    financials: { tuitionFee: 160000, materialFee: 40000, totalDebt: 200000, paidAmount: 200000, remainingDebt: 0 },
-    receipts: []
-  },
-  { 
-    id: 3, name: "Can Demir", grade: "1-C", parentName: "Burak Demir", phone: "05321112233",
-    financials: { tuitionFee: 140000, materialFee: 30000, totalDebt: 170000, paidAmount: 50000, remainingDebt: 120000 },
-    receipts: []
-  },
-];
-
-const PENDING_RECEIPTS: PaymentReceipt[] = [
-    { id: 101, date: "2023-11-01", amount: 15000, description: "Kasım Taksidi", status: "pending", fileUrl: "#", studentName: "Ali Yılmaz" },
-    { id: 102, date: "2023-11-02", amount: 12000, description: "Kırtasiye Ödemesi", status: "pending", fileUrl: "#", studentName: "Can Demir" }
-];
+import { supabase } from '../services/supabase';
 
 const Admin: React.FC = () => {
-  // Receipt Management State
-  const [pendingReceipts, setPendingReceipts] = useState<PaymentReceipt[]>(PENDING_RECEIPTS);
+  // Data State
+  const [students, setStudents] = useState<Student[]>([]);
+  const [pendingReceipts, setPendingReceipts] = useState<PaymentReceipt[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Announcement State
   const [topic, setTopic] = useState('');
@@ -40,7 +19,6 @@ const Admin: React.FC = () => {
   const [scheduledDate, setScheduledDate] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [sendSuccess, setSendSuccess] = useState(false);
   const [announcements, setAnnouncements] = useState<any[]>([
       {id:1, subject: "Veli Toplantısı", audience: "Veliler", date: "2023-10-20", status: "sent"}
   ]);
@@ -50,17 +28,95 @@ const Admin: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<{ text: string, sources: SearchResult[] } | null>(null);
 
-  // Activity & Schedule Management State
+  // Activity & Schedule
   const [activityName, setActivityName] = useState('');
   const [activityCost, setActivityCost] = useState('');
   const [activityDate, setActivityDate] = useState('');
   const [scheduleClass, setScheduleClass] = useState('5-B');
   const [scheduleFile, setScheduleFile] = useState<File | null>(null);
 
+  useEffect(() => {
+      fetchAdminData();
+  }, []);
+
+  const fetchAdminData = async () => {
+      setLoading(true);
+      try {
+          // Fetch Students with Financials
+          const { data: studentData, error: sError } = await supabase
+              .from('students')
+              .select(`
+                *,
+                financial_records(*)
+              `);
+
+          if (studentData) {
+              const mappedStudents: Student[] = studentData.map((s: any) => ({
+                  id: s.id,
+                  name: `${s.name} ${s.surname}`,
+                  grade: s.full_class || `${s.grade_level}-${s.branch}`,
+                  gender: s.gender,
+                  parentName: s.parent_name,
+                  phone: s.phone,
+                  receipts: [],
+                  financials: s.financial_records?.[0] ? {
+                      tuitionFee: s.financial_records[0].tuition_fee,
+                      materialFee: s.financial_records[0].material_fee,
+                      paidAmount: s.financial_records[0].paid_amount,
+                      totalDebt: s.financial_records[0].tuition_fee + s.financial_records[0].material_fee,
+                      remainingDebt: (s.financial_records[0].tuition_fee + s.financial_records[0].material_fee) - s.financial_records[0].paid_amount
+                  } : { tuitionFee:0, materialFee:0, totalDebt:0, paidAmount:0, remainingDebt:0 }
+              }));
+              setStudents(mappedStudents);
+          }
+
+          // Fetch Pending Receipts
+          const { data: receiptData } = await supabase
+             .from('receipts')
+             .select('*, students(name, surname)')
+             .eq('status', 'pending');
+          
+          if (receiptData) {
+              const mappedReceipts: PaymentReceipt[] = receiptData.map((r: any) => ({
+                  id: r.id,
+                  date: r.date,
+                  amount: r.amount,
+                  description: r.description,
+                  status: r.status,
+                  fileUrl: r.file_url,
+                  studentName: `${r.students?.name} ${r.students?.surname}`
+              }));
+              setPendingReceipts(mappedReceipts);
+          }
+
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   // Handlers
-  const handleReceiptAction = (id: number, action: 'approve' | 'reject') => {
-      setPendingReceipts(prev => prev.filter(r => r.id !== id));
-      alert(`Dekont ${action === 'approve' ? 'onaylandı' : 'reddedildi'}.`);
+  const handleReceiptAction = async (id: number, action: 'approve' | 'reject') => {
+      try {
+        const { error } = await supabase
+            .from('receipts')
+            .update({ status: action === 'approve' ? 'approved' : 'rejected' })
+            .eq('id', id);
+        
+        if (!error) {
+            setPendingReceipts(prev => prev.filter(r => r.id !== id));
+            // If approved, update financial record
+            if (action === 'approve') {
+                // In a real app, you'd fetch the receipt to get amount and student_id, then increment paid_amount
+                // For now, reload data
+                fetchAdminData();
+            }
+            alert(`Dekont ${action === 'approve' ? 'onaylandı' : 'reddedildi'}.`);
+        }
+      } catch (e) {
+          console.error(e);
+      }
   };
 
   const handleGenerate = async () => {
@@ -95,13 +151,11 @@ const Admin: React.FC = () => {
           }
           
           if (smsMessage) {
-              alert(`Sistemdeki ${MOCK_STUDENTS.length} veliye SMS gönderildi:\n"${smsMessage}"`);
+              alert(`Sistemdeki ${students.length} veliye SMS gönderildi:\n"${smsMessage}"`);
           }
       }
 
       setIsSending(false);
-      setSendSuccess(true);
-      setTimeout(() => setSendSuccess(false), 2000);
     }, 1000);
   };
 
@@ -137,6 +191,8 @@ const Admin: React.FC = () => {
       setScheduleFile(null);
   };
 
+  if (loading) return <div className="p-8 text-center">Yükleniyor...</div>;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
@@ -149,11 +205,15 @@ const Admin: React.FC = () => {
         <div className="mt-4 md:mt-0 flex gap-4">
              <div className="text-right">
                  <p className="text-xs text-gray-500 uppercase">Toplam Tahsilat</p>
-                 <p className="text-lg font-bold text-green-600">₺340,000</p>
+                 <p className="text-lg font-bold text-green-600">
+                     ₺{students.reduce((acc, s) => acc + (s.financials.paidAmount || 0), 0).toLocaleString()}
+                 </p>
              </div>
              <div className="text-right border-l pl-4 border-gray-200">
                  <p className="text-xs text-gray-500 uppercase">Bekleyen Alacak</p>
-                 <p className="text-lg font-bold text-orange-600">₺215,000</p>
+                 <p className="text-lg font-bold text-orange-600">
+                     ₺{students.reduce((acc, s) => acc + (s.financials.remainingDebt || 0), 0).toLocaleString()}
+                 </p>
              </div>
         </div>
       </div>
@@ -217,7 +277,7 @@ const Admin: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {MOCK_STUDENTS.map(student => (
+                        {students.map(student => (
                             <tr key={student.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-4">
                                     <div className="text-sm font-medium text-gray-900">{student.name}</div>
@@ -226,7 +286,7 @@ const Admin: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4 text-sm text-gray-500">{student.grade}</td>
                                 <td className="px-6 py-4">
-                                    {student.financials.remainingDebt === 0 ? (
+                                    {student.financials.remainingDebt <= 0 ? (
                                         <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Borçsuz</span>
                                     ) : (
                                         <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">

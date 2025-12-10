@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { UserRole } from '../types';
+import { UserRole, SessionUser } from '../types';
 import { useNavigate, Link } from 'react-router-dom';
-import { GraduationCap, User, Lock, CreditCard, BookOpen, UserCog, Phone, UserPlus } from 'lucide-react';
+import { GraduationCap, User, Lock, CreditCard, BookOpen, UserCog, Phone, UserPlus, AlertCircle } from 'lucide-react';
+import { supabase } from '../services/supabase';
 
 interface LoginProps {
-  onLogin: (role: UserRole) => void;
+  onLogin: (user: SessionUser) => void;
 }
 
 type LoginType = 'student' | 'admin';
@@ -12,38 +13,67 @@ type LoginType = 'student' | 'admin';
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [loginType, setLoginType] = useState<LoginType>('student');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Student Form State
-  const [studentName, setStudentName] = useState('');
-  const [studentSurname, setStudentSurname] = useState('');
   const [schoolNo, setSchoolNo] = useState('');
   const [studentTc, setStudentTc] = useState('');
-  const [studentPhone, setStudentPhone] = useState('');
-
+  
   // Admin Form State
   const [adminTc, setAdminTc] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
-    // Simulate API verification
-    setTimeout(() => {
-      setLoading(false);
+    try {
       if (loginType === 'admin') {
-        // Mock Admin Logic
-        onLogin(UserRole.ADMIN);
-        navigate('/admin');
+        // Mock Admin Login (Database for admins usually separate or specific logic)
+        // For simplicity, we keep the hardcoded admin check or you could query an 'admins' table
+        if (adminTc === '11111111111' && adminPassword) {
+             const adminUser: SessionUser = {
+                 role: UserRole.ADMIN,
+                 name: "Okul Müdürü"
+             };
+             onLogin(adminUser);
+             navigate('/admin');
+        } else {
+             throw new Error("Hatalı yönetici bilgileri.");
+        }
       } else {
-        // Mock Student/Parent Logic
-        onLogin(UserRole.CUSTOMER);
-        // In a real app, we would save the phone number here if it's new
-        console.log(`Veli telefonu kaydedildi: ${studentPhone}`);
+        // Supabase Student Login
+        const { data, error } = await supabase
+            .from('students')
+            .select('*')
+            .eq('school_no', schoolNo)
+            .single();
+
+        if (error || !data) {
+            throw new Error("Öğrenci bulunamadı. Okul numarasını kontrol ediniz.");
+        }
+
+        // Optional: Verify TC No if needed security-wise
+        // if (data.tc_no !== studentTc) throw new Error("TC Kimlik No uyuşmuyor.");
+
+        const matchedUser: SessionUser = {
+             role: UserRole.CUSTOMER,
+             name: data.parent_name,
+             studentId: data.id,
+             studentName: `${data.name} ${data.surname}`,
+             grade: data.full_class
+        };
+        
+        onLogin(matchedUser);
         navigate('/');
       }
-    }, 1200);
+    } catch (err: any) {
+        setError(err.message || "Giriş yapılamadı.");
+    } finally {
+        setLoading(false);
+    }
   };
 
   return (
@@ -66,7 +96,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         {/* Login Type Tabs */}
         <div className="flex bg-gray-100 p-1 rounded-lg">
           <button
-            onClick={() => setLoginType('student')}
+            onClick={() => { setLoginType('student'); setError(null); }}
             className={`flex-1 flex items-center justify-center py-2 text-sm font-medium rounded-md transition-all ${
               loginType === 'student'
                 ? 'bg-white text-indigo-900 shadow-sm'
@@ -77,7 +107,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             Veli / Öğrenci
           </button>
           <button
-            onClick={() => setLoginType('admin')}
+            onClick={() => { setLoginType('admin'); setError(null); }}
             className={`flex-1 flex items-center justify-center py-2 text-sm font-medium rounded-md transition-all ${
               loginType === 'admin'
                 ? 'bg-white text-indigo-900 shadow-sm'
@@ -91,41 +121,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
           
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+            </div>
+          )}
+
           {loginType === 'student' ? (
             /* Student/Parent Login Form */
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">Öğrenci Adı</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <input
-                      id="name"
-                      type="text"
-                      required
-                      className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      placeholder="Ali"
-                      value={studentName}
-                      onChange={(e) => setStudentName(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="surname" className="block text-xs font-medium text-gray-700 mb-1">Soyadı</label>
-                  <input
-                    id="surname"
-                    type="text"
-                    required
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="Yılmaz"
-                    value={studentSurname}
-                    onChange={(e) => setStudentSurname(e.target.value)}
-                  />
-                </div>
-              </div>
-
               <div>
                 <label htmlFor="schoolNo" className="block text-xs font-medium text-gray-700 mb-1">Okul Numarası</label>
                 <div className="relative">
@@ -153,34 +158,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   <input
                     id="studentTc"
                     type="text"
-                    required
                     maxLength={11}
                     className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="11111111111"
+                    placeholder="Opsiyonel"
                     value={studentTc}
                     onChange={(e) => setStudentTc(e.target.value)}
                   />
                 </div>
-              </div>
-
-              <div>
-                <label htmlFor="studentPhone" className="block text-xs font-medium text-gray-700 mb-1">Veli Cep Telefonu (İletişim için)</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Phone className="h-4 w-4 text-gray-400" />
-                  </div>
-                  <input
-                    id="studentPhone"
-                    type="tel"
-                    required
-                    maxLength={11}
-                    className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="05XX XXX XX XX"
-                    value={studentPhone}
-                    onChange={(e) => setStudentPhone(e.target.value)}
-                  />
-                </div>
-                <p className="mt-1 text-[10px] text-gray-500">Devamsızlık ve ödev bildirimleri bu numaraya SMS olarak gönderilecektir.</p>
               </div>
             </div>
           ) : (
@@ -231,7 +215,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               disabled={loading}
               className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white ${loading ? 'bg-indigo-400' : 'bg-indigo-900 hover:bg-indigo-800'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors shadow-sm`}
             >
-              {loading ? 'Sisteme Bağlanılıyor...' : (loginType === 'student' ? 'Bilgileri Kaydet ve Giriş Yap' : 'Yönetici Girişi Yap')}
+              {loading ? 'Sisteme Bağlanılıyor...' : (loginType === 'student' ? 'Giriş Yap' : 'Yönetici Girişi Yap')}
             </button>
           </div>
           
