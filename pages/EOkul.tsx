@@ -49,8 +49,12 @@ const EOkul: React.FC<EOkulProps> = ({ currentUser }) => {
       // In a real scenario, fetch from 'grades' and 'attendance' tables in Supabase
       // For now, we simulate a delay and use Mock data or Supabase if available
       try {
-          const { data: attData } = await supabase.from('attendance').select('*').eq('student_id', currentUser.studentId);
-          if (attData && attData.length > 0) {
+          const { data: attData, error } = await supabase.from('attendance').select('*').eq('student_id', currentUser.studentId);
+          
+          if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
+               // Table missing, rely on mock
+               setAttendanceList(MOCK_ATTENDANCE);
+          } else if (attData && attData.length > 0) {
               setAttendanceList(attData);
           } else {
               setAttendanceList(MOCK_ATTENDANCE);
@@ -60,6 +64,8 @@ const EOkul: React.FC<EOkulProps> = ({ currentUser }) => {
           setGrades(MOCK_GRADES);
       } catch (e) {
           console.error(e);
+          setAttendanceList(MOCK_ATTENDANCE);
+          setGrades(MOCK_GRADES);
       } finally {
           setLoading(false);
       }
@@ -78,7 +84,10 @@ const EOkul: React.FC<EOkulProps> = ({ currentUser }) => {
               .eq('school_no', searchSchoolNo)
               .single();
 
-          if (data) {
+          if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
+              alert("Veritabanı tabloları bulunamadı (Demo Modu). Örnek bir öğrenci gösteriliyor.");
+              setFoundStudent({ id: 999, name: "Demo", surname: "Öğrenci", full_class: "10-B" });
+          } else if (data) {
               setFoundStudent(data);
           } else {
               alert("Öğrenci bulunamadı.");
@@ -104,7 +113,7 @@ const EOkul: React.FC<EOkulProps> = ({ currentUser }) => {
                }
            ]);
 
-           if (error && error.code !== '42P01') { // Ignore "relation does not exist" for demo if table missing
+           if (error && error.code !== '42P01' && error.code !== 'PGRST205') { 
                console.error(error);
                throw error;
            }

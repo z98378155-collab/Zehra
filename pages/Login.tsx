@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserRole, SessionUser } from '../types';
 import { useNavigate, Link } from 'react-router-dom';
-import { GraduationCap, User, Lock, CreditCard, BookOpen, UserCog, UserPlus, AlertCircle } from 'lucide-react';
+import { GraduationCap, User, Lock, CreditCard, BookOpen, UserCog, AlertCircle } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
 interface LoginProps {
@@ -32,7 +32,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     try {
       if (loginType === 'admin') {
         // 1. Okul Müdürü Girişi
-        if (adminTc === '11111111111' && adminPassword) { // Şifre kontrolü eklenebilir
+        if (adminTc === '11111111111' && adminPassword) { 
              const adminUser: SessionUser = {
                  role: UserRole.ADMIN,
                  name: "Okul Müdürü"
@@ -44,10 +44,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         else if (adminTc === '12121212122' && adminPassword === '787878') {
              const adminUser: SessionUser = {
                  role: UserRole.ADMIN,
-                 name: "Arda Akça" // İsim güncellendi
+                 name: "Arda Akça" 
              };
              onLogin(adminUser);
-             navigate('/admin'); // Admin paneline veya E-Okul paneline yönlendirebilirsiniz
+             navigate('/admin'); 
         }
         else {
              throw new Error("Hatalı yönetici bilgileri. TC veya Şifre yanlış.");
@@ -60,8 +60,31 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             .eq('school_no', schoolNo)
             .single();
 
-        if (error || !data) {
-            throw new Error("Öğrenci bulunamadı. Okul numarasını kontrol ediniz.");
+        // Handle DB Errors for Demo Mode
+        if (error) {
+            // PGRST205: Relation missing, 42P01: Table undefined
+            if (error.code === 'PGRST205' || error.code === '42P01') {
+                alert("Sistem Uyarısı: Veritabanı tabloları bulunamadı. DEMO MODU ile giriş yapılıyor.");
+                const demoUser: SessionUser = {
+                    role: UserRole.CUSTOMER,
+                    name: "Demo Veli",
+                    studentId: 123,
+                    studentName: "Demo Öğrenci",
+                    grade: "9-A"
+                };
+                onLogin(demoUser);
+                navigate('/');
+                return;
+            }
+            // Other errors (e.g. record not found)
+            if (error.code === 'PGRST116') {
+                 throw new Error("Öğrenci bulunamadı. Okul numarasını kontrol ediniz.");
+            }
+            throw error;
+        }
+
+        if (!data) {
+            throw new Error("Öğrenci bulunamadı.");
         }
 
         const matchedUser: SessionUser = {
@@ -223,22 +246,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             >
               {loading ? 'Sisteme Bağlanılıyor...' : (loginType === 'student' ? 'Giriş Yap' : 'Yönetici Girişi Yap')}
             </button>
-          </div>
-          
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">veya</span>
-            </div>
-          </div>
-
-          <div className="mt-4">
-             <Link to="/register" className="w-full flex justify-center items-center py-2 px-4 border border-indigo-900 rounded-md shadow-sm text-sm font-medium text-indigo-900 bg-white hover:bg-gray-50 transition-colors">
-                <UserPlus className="w-4 h-4 mr-2" />
-                Yeni Öğrenci Kaydı Oluştur
-             </Link>
           </div>
         </form>
       </div>

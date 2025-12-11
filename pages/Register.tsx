@@ -108,12 +108,14 @@ const Register: React.FC = () => {
         try {
             // 3. Check Capacity (Skip if table missing/error for demo flow)
             try {
-                const { count } = await supabase
+                const { count, error } = await supabase
                     .from('students')
                     .select('*', { count: 'exact', head: true })
                     .eq('full_class', currentClassKey);
 
-                if (count !== null && count >= MAX_CAPACITY) {
+                if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
+                    // Ignore missing table error
+                } else if (count !== null && count >= MAX_CAPACITY) {
                     setError(`Seçilen sınıf (${currentClassKey}) kontenjanı doludur (${count}/${MAX_CAPACITY}).`);
                     setLoading(false);
                     return;
@@ -146,12 +148,12 @@ const Register: React.FC = () => {
                 .single();
 
             if (insertError) {
-                 // For demo purposes, if table doesn't exist, we still want to show the success screen
-                 // as requested by the user flow "give school number"
+                 // Updated: Handle both 42P01 and PGRST205 (missing tables) as "Success" for Demo Mode
                  console.error("Insert failed:", insertError);
-                 if (insertError.code !== '42P01') { // 42P01 is undefined_table
+                 if (insertError.code !== '42P01' && insertError.code !== 'PGRST205') { 
                      throw insertError;
                  }
+                 // If demo, we proceed as if studentData exists
             }
 
             // 6. Create Initial Financial Record (Optional if main insert failed but we proceeding for demo)
@@ -365,4 +367,39 @@ const Register: React.FC = () => {
                                  Kaydı Onaylamak İçin Yönetici Şifresi
                              </label>
                              <div className="relative">
-                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-
+                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                     <Lock className="h-4 w-4 text-red-400" />
+                                 </div>
+                                 <input 
+                                     type="password" 
+                                     required 
+                                     className="w-full pl-10 border-red-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500 border p-2 bg-white"
+                                     value={adminPassword}
+                                     onChange={e => setAdminPassword(e.target.value)}
+                                     placeholder="Yetkili şifresini giriniz..."
+                                 />
+                             </div>
+                             <p className="text-xs text-red-600">Bu işlem sadece yetkili okul personeli tarafından yapılmalıdır.</p>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 flex items-center justify-end gap-4">
+                        <button type="button" onClick={() => navigate('/login')} className="text-gray-600 hover:text-gray-900 font-medium">
+                            İptal
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={loading || !adminPassword}
+                            className="flex items-center gap-2 px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
+                        >
+                            <Save className="w-5 h-5" />
+                            {loading ? 'İşleniyor...' : 'Kaydı Tamamla'}
+                        </button>
+                    </div>
+                </form>
+             </div>
+        </div>
+    );
+};
+
+export default Register;

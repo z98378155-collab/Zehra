@@ -3,7 +3,6 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Admin from './pages/Admin';
 import EOkul from './pages/EOkul';
 import VoiceSupport from './components/VoiceSupport';
@@ -35,10 +34,7 @@ const App: React.FC = () => {
               path="/login" 
               element={!currentUser ? <Login onLogin={handleLogin} /> : (currentUser.role === UserRole.ADMIN ? <Navigate to="/admin" /> : <Navigate to="/" />)} 
             />
-            <Route 
-              path="/register" 
-              element={<Register />} 
-            />
+            {/* Register page removed, functionality moved to Admin dashboard */}
             <Route 
               path="/admin" 
               element={currentUser && currentUser.role === UserRole.ADMIN ? <Admin /> : <Navigate to="/login" />} 
