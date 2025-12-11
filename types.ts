@@ -27,10 +27,12 @@ export interface SchoolActivity {
   date: string;
   cost: number;
   description: string;
+  targetClass?: string; // 'all' or specific class like '11-D'
 }
 
 export interface Student {
   id: number;
+  schoolNo: string; // Added school number
   name: string;
   grade: string;
   gender: 'male' | 'female'; // Added gender
@@ -38,6 +40,21 @@ export interface Student {
   phone: string; // Added phone number
   financials: FinancialRecord;
   receipts: PaymentReceipt[];
+}
+
+export interface Grade {
+  lesson: string;
+  exam1?: number;
+  exam2?: number;
+  project?: number;
+  average?: number;
+}
+
+export interface Attendance {
+  id: number;
+  date: string;
+  type: 'Özürlü' | 'Özürsüz';
+  duration: 'Tam Gün' | 'Yarım Gün';
 }
 
 export interface MessageTemplate {
@@ -51,7 +68,7 @@ export interface SearchResult {
 }
 
 export enum UserRole {
-  ADMIN = 'ADMIN', // Okul Müdürü / Muhasebe
+  ADMIN = 'ADMIN', // Okul Müdürü / Müdür Yrd / Muhasebe
   CUSTOMER = 'CUSTOMER', // Veli
   GUEST = 'GUEST'
 }

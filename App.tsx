@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Admin from './pages/Admin';
+import EOkul from './pages/EOkul';
 import VoiceSupport from './components/VoiceSupport';
 import { UserRole, SessionUser } from './types';
 
@@ -41,6 +42,10 @@ const App: React.FC = () => {
             <Route 
               path="/admin" 
               element={currentUser && currentUser.role === UserRole.ADMIN ? <Admin /> : <Navigate to="/login" />} 
+            />
+            <Route 
+              path="/e-okul" 
+              element={currentUser ? <EOkul currentUser={currentUser} /> : <Navigate to="/login" />} 
             />
           </Routes>
         </main>

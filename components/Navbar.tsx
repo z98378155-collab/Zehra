@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LogOut, GraduationCap, LayoutDashboard, WalletCards } from 'lucide-react';
+import { LogOut, GraduationCap, LayoutDashboard, WalletCards, School } from 'lucide-react';
 import { UserRole, SessionUser } from '../types';
 
 interface NavbarProps {
@@ -29,16 +29,28 @@ const Navbar: React.FC<NavbarProps> = ({ currentUser, onLogout }) => {
             </Link>
             <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
               {currentUser?.role === UserRole.CUSTOMER && (
+                <>
                 <Link to="/" className={`inline-flex items-center px-3 py-2 text-sm font-medium ${isActive('/')}`}>
                    <WalletCards className="w-4 h-4 mr-2" />
                    Öğrenci Bilgilerim
                 </Link>
+                <Link to="/e-okul" className={`inline-flex items-center px-3 py-2 text-sm font-medium ${isActive('/e-okul')}`}>
+                   <School className="w-4 h-4 mr-2" />
+                   E-Okul Not/Devamsızlık
+                </Link>
+                </>
               )}
               {currentUser?.role === UserRole.ADMIN && (
+                <>
                 <Link to="/admin" className={`inline-flex items-center px-3 py-2 text-sm font-medium ${isActive('/admin')}`}>
                   <LayoutDashboard className="w-4 h-4 mr-2" />
                   Yönetim Paneli
                 </Link>
+                 <Link to="/e-okul" className={`inline-flex items-center px-3 py-2 text-sm font-medium ${isActive('/e-okul')}`}>
+                   <School className="w-4 h-4 mr-2" />
+                   E-Okul Yönetimi
+                </Link>
+                </>
               )}
             </div>
           </div>
@@ -47,10 +59,10 @@ const Navbar: React.FC<NavbarProps> = ({ currentUser, onLogout }) => {
               <>
                  <span className="text-sm text-gray-600 hidden md:flex flex-col items-end border-r border-gray-300 pr-4">
                   <span className="font-bold text-indigo-900">
-                    {currentUser.role === UserRole.ADMIN ? 'Sayın Yönetici' : currentUser.name}
+                    {currentUser.role === UserRole.ADMIN ? currentUser.name : currentUser.name}
                   </span>
                   <span className="text-xs text-gray-500">
-                    {currentUser.role === UserRole.ADMIN ? 'Okul Müdürü' : `Veli (${currentUser.studentName})`}
+                    {currentUser.role === UserRole.ADMIN ? 'Yönetici' : `Veli (${currentUser.studentName})`}
                   </span>
                 </span>
                 <button

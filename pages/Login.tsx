@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserRole, SessionUser } from '../types';
 import { useNavigate, Link } from 'react-router-dom';
-import { GraduationCap, User, Lock, CreditCard, BookOpen, UserCog, Phone, UserPlus, AlertCircle } from 'lucide-react';
+import { GraduationCap, User, Lock, CreditCard, BookOpen, UserCog, UserPlus, AlertCircle } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
 interface LoginProps {
@@ -31,17 +31,26 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     try {
       if (loginType === 'admin') {
-        // Mock Admin Login (Database for admins usually separate or specific logic)
-        // For simplicity, we keep the hardcoded admin check or you could query an 'admins' table
-        if (adminTc === '11111111111' && adminPassword) {
+        // 1. Okul Müdürü Girişi
+        if (adminTc === '11111111111' && adminPassword) { // Şifre kontrolü eklenebilir
              const adminUser: SessionUser = {
                  role: UserRole.ADMIN,
                  name: "Okul Müdürü"
              };
              onLogin(adminUser);
              navigate('/admin');
-        } else {
-             throw new Error("Hatalı yönetici bilgileri.");
+        } 
+        // 2. Müdür Yardımcısı Girişi (Arda Akça)
+        else if (adminTc === '12121212122' && adminPassword === '787878') {
+             const adminUser: SessionUser = {
+                 role: UserRole.ADMIN,
+                 name: "Arda Akça" // İsim güncellendi
+             };
+             onLogin(adminUser);
+             navigate('/admin'); // Admin paneline veya E-Okul paneline yönlendirebilirsiniz
+        }
+        else {
+             throw new Error("Hatalı yönetici bilgileri. TC veya Şifre yanlış.");
         }
       } else {
         // Supabase Student Login
@@ -54,9 +63,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         if (error || !data) {
             throw new Error("Öğrenci bulunamadı. Okul numarasını kontrol ediniz.");
         }
-
-        // Optional: Verify TC No if needed security-wise
-        // if (data.tc_no !== studentTc) throw new Error("TC Kimlik No uyuşmuyor.");
 
         const matchedUser: SessionUser = {
              role: UserRole.CUSTOMER,
@@ -182,7 +188,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     required
                     maxLength={11}
                     className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="11111111111"
+                    placeholder="12121212122"
                     value={adminTc}
                     onChange={(e) => setAdminTc(e.target.value)}
                   />

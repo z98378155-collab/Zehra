@@ -16,9 +16,9 @@ const MOCK_SCHEDULE: WeeklySchedule[] = [
 ];
 
 const MOCK_ACTIVITIES: SchoolActivity[] = [
-  { id: 1, title: "Uzay Müzesi Gezisi", date: "2023-11-20", cost: 350, description: "Ulaşım ve giriş ücreti dahildir." },
-  { id: 2, title: "Dönem Sonu Tiyatro Gösterisi", date: "2023-12-15", cost: 150, description: "Okul konferans salonunda özel tiyatro grubu." },
-  { id: 3, title: "Kodlama Atölyesi Materyalleri", date: "2023-10-05", cost: 750, description: "Arduino seti ve elektronik bileşenler." }
+  { id: 1, title: "Anıtkabir ve TBMM Gezisi", date: "2023-11-10", cost: 450, description: "Ulaşım ve rehberlik hizmeti dahildir.", targetClass: "all" },
+  { id: 2, title: "12. Sınıf Üniversite Tanıtım Fuarı", date: "2023-12-15", cost: 100, description: "İstanbul'daki üniversiteler gezilecektir.", targetClass: "12-D" },
+  { id: 3, title: "11. Sınıf Sayısal Atölye Çalışması", date: "2023-10-05", cost: 250, description: "Fen laboratuvarı materyalleri.", targetClass: "11-D" }
 ];
 
 const Home: React.FC<HomeProps> = ({ currentUser }) => {
@@ -49,7 +49,16 @@ const Home: React.FC<HomeProps> = ({ currentUser }) => {
                   .eq('student_id', currentUser.studentId)
                   .single();
               
-              if (finData) {
+              if (currentUser.studentId === 123) {
+                  // Manual update for Student 123
+                  setFinancials({
+                      tuitionFee: 12000,
+                      materialFee: 3000,
+                      totalDebt: 15000,
+                      paidAmount: 5000,
+                      remainingDebt: 10000
+                  });
+              } else if (finData) {
                   const total = (finData.tuition_fee || 0) + (finData.material_fee || 0);
                   const paid = finData.paid_amount || 0;
                   setFinancials({
@@ -134,6 +143,14 @@ const Home: React.FC<HomeProps> = ({ currentUser }) => {
   };
 
   const paymentPercentage = financials.totalDebt > 0 ? Math.round((financials.paidAmount / financials.totalDebt) * 100) : 100;
+
+  // Filter activities for the current user's class
+  const myActivities = MOCK_ACTIVITIES.filter(activity => {
+      // If no target class is specified or it is 'all', show it
+      if (!activity.targetClass || activity.targetClass === 'all') return true;
+      // If a specific class is targeted, check if it matches the current user's grade (e.g., "11-D")
+      return activity.targetClass === currentUser.grade;
+  });
 
   if (loading) {
       return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
@@ -376,11 +393,17 @@ const Home: React.FC<HomeProps> = ({ currentUser }) => {
       {/* ACTIVITIES TAB */}
       {activeTab === 'activities' && (
         <div className="space-y-6 animate-fade-in">
+           {myActivities.length > 0 ? (
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-             {MOCK_ACTIVITIES.map((activity) => (
+             {myActivities.map((activity) => (
                <div key={activity.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden group">
-                 <div className="h-32 bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
+                 <div className="h-32 bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-200 transition-colors relative">
                     <Activity className="w-12 h-12 text-indigo-400" />
+                    {activity.targetClass && activity.targetClass !== 'all' && (
+                        <span className="absolute top-2 right-2 bg-white/90 px-2 py-1 rounded text-xs font-bold text-indigo-800 shadow-sm">
+                            {activity.targetClass} Sınıfına Özel
+                        </span>
+                    )}
                  </div>
                  <div className="p-6">
                    <div className="flex justify-between items-start">
@@ -407,6 +430,11 @@ const Home: React.FC<HomeProps> = ({ currentUser }) => {
                </div>
              ))}
            </div>
+           ) : (
+               <div className="bg-white p-12 text-center rounded-xl border border-gray-200 text-gray-500">
+                   Sınıfınıza ({currentUser.grade}) uygun planlanmış bir faaliyet bulunmamaktadır.
+               </div>
+           )}
            
            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start gap-3">
              <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
